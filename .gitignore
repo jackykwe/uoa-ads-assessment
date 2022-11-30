@@ -1,0 +1,4 @@
+**/credentials.yaml
+
+# the virtual environment used for autopep8 for this repository
+adsvenv/

@@ -1,8 +1,10 @@
 import os
+
 import yaml
 
 default_file = os.path.join(os.path.dirname(__file__), "defaults.yml")
-local_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "machine.yml"))
+local_file = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "machine.yml"))
 user_file = '_config.yml'
 
 config = {}
@@ -19,7 +21,7 @@ if os.path.exists(user_file):
     with open(user_file) as file:
         config.update(yaml.load(file, Loader=yaml.FullLoader))
 
-if config=={}:
+if config == {}:
     raise ValueError(
         "No configuration file found at either "
         + user_file

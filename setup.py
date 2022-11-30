@@ -14,20 +14,20 @@ import os
 import sys
 from shutil import rmtree
 
-from setuptools import find_packages, setup, Command
+from setuptools import Command, find_packages, setup
 
 # Package meta-data.
 NAME = "fynesse"
 DESCRIPTION = "Template files for performing fynesse pipeline data analysis with python."
 URL = "https://github.com/lawrennd/fynesse_template"
-EMAIL = "emal@domain.here"
-AUTHOR = "Givenname Familyname"
+EMAIL = "jwek2@cam.ac.uk"
+AUTHOR = "Jacky Kung"
 REQUIRES_PYTHON = ">=3.6.0"
 VERSION = "0.1.0"
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    "pandas", "numpy", "jupyter", "matplotlib", 
+    "pandas", "numpy", "jupyter", "matplotlib",
 ]
 
 # What packages are optional?
@@ -87,7 +87,8 @@ class UploadCommand(Command):
             pass
 
         self.status("Building Source and Wheel (universal) distribution…")
-        os.system("{0} setup.py sdist bdist_wheel --universal".format(sys.executable))
+        os.system(
+            "{0} setup.py sdist bdist_wheel --universal".format(sys.executable))
 
         self.status("Uploading the package to PyPI via Twine…")
         os.system("twine upload dist/*")
@@ -110,7 +111,8 @@ setup(
     author_email=EMAIL,
     python_requires=REQUIRES_PYTHON,
     url=URL,
-    packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
+    packages=find_packages(
+        exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
     package_data=PACKAGE_DATA,
     # If your package is a single module, use this instead of "packages":
     # py_modules=["mypackage"],
