@@ -74,7 +74,7 @@ def download_ppdata_from_gov(
     verbose=False
 ):
     os.makedirs(dir_name, exist_ok=True)
-    for year in range(first_year_inclusive, final_year_inclusive + 1):
+    for year in tqdm(range(first_year_inclusive, final_year_inclusive + 1)):
         for part in (1, 2):
             file_name = f"pp-{year}-part{part}.csv"
             file_name_with_dir = os.path.join(dir_name, file_name)
@@ -94,8 +94,12 @@ def download_ppdata_from_gov(
                     print(f"{file_name}: Downloaded.")
 
 
-def fix_ppdata(dir_name="data/ppdata"):
-    for year in tqdm(range(constants.FIRST_YEAR_INCLUSIVE, constants.FINAL_YEAR_INCLUSIVE + 1)):
+def fix_ppdata(
+    dir_name="data/ppdata",
+    first_year_inclusive=constants.FIRST_YEAR_INCLUSIVE,
+    final_year_inclusive=constants.FINAL_YEAR_INCLUSIVE
+):
+    for year in tqdm(range(first_year_inclusive, final_year_inclusive + 1)):
         for part in tqdm((1, 2), leave=False):
             file_name = f"pp-{year}-part{part}.csv"
             file_name_with_dir = os.path.join(dir_name, file_name)

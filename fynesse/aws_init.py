@@ -1,24 +1,54 @@
 import os
 
+import pandas as pd
 from tqdm.auto import tqdm
 
 from . import access, aws_utils, constants
 
+# These functions are coupled with the assessment task, as they provide sensible defaults for
+# the underlying aws_utils functions. These functions thus serve as convenience functions for
+# the assessment task. These can be easily adapted for other tasks apart from housing prediction.
 
-def init_create_database_if_not_exists():
+
+def init_create_database_if_not_exists(drop_before_create=False):
     with aws_utils.create_connection(database=constants.DATABASE_NAME) as conn:
-        print(
-            f"Database created: {aws_utils.create_database(conn, constants.DATABASE_NAME)}"
+        created = aws_utils.create_database(
+            conn,
+            constants.DATABASE_NAME,
+            drop_before_create=drop_before_create
         )
+    if created:
+        print(
+            f"Database {constants.DATABASE_NAME}{' dropped and' if drop_before_create else ''} created.")
+    else:
+        print(
+            f"Database {constants.DATABASE_NAME} already exists, not re-created.")
 
 
-def init_setup_aws_ppdata(dir_name="data/ppdata"):
+def init_setup_aws_ppdata(
+    dir_name="data/ppdata",
+    first_year_inclusive=constants.FIRST_YEAR_INCLUSIVE,
+    final_year_inclusive=constants.FINAL_YEAR_INCLUSIVE
+):
     """
     WARNING: Do NOT run more than once. This operation is NOT idempotent.
     """
-    access.download_ppdata_from_gov(dir_name=dir_name)
-    access.fix_ppdata(dir_name=dir_name)
+    print("Downloading ppdata from gov...")
+    access.download_ppdata_from_gov(
+        dir_name=dir_name,
+        first_year_inclusive=first_year_inclusive,
+        final_year_inclusive=first_year_inclusive
+    )
 
+    # Data cleanup
+    print("Fixing ppdata (removing invalid rows)...")
+    access.fix_ppdata(
+        dir_name=dir_name,
+        first_year_inclusive=first_year_inclusive,
+        final_year_inclusive=first_year_inclusive
+    )
+
+    total_rows_to_upload = 0
     with aws_utils.create_connection(database=constants.DATABASE_NAME) as conn:
         aws_utils.create_new_table_if_not_exists(
             conn,
@@ -49,16 +79,28 @@ def init_setup_aws_ppdata(dir_name="data/ppdata"):
             ]
         )
 
+        print("Uploading ppdata to AWS...")
         for year in tqdm(range(constants.FIRST_YEAR_INCLUSIVE, constants.FINAL_YEAR_INCLUSIVE + 1)):
             for part in tqdm((1, 2), leave=False):
                 file_name_with_dir = os.path.join(
                     dir_name, f"pp-{year}-part{part}fixed.csv"
                 )
+
+                tempdf = access.read_ppdata_to_df(
+                    year,
+                    part,
+                    dir_name=dir_name,
+                    fixed_version=True
+                )
+                total_rows_to_upload += len(tempdf)
+                del tempdf
+
                 aws_utils.upload_data_into_table(
                     constants.PPDATA_TABLE_NAME,
                     file_name_with_dir
                 )
 
+        print("Adding ppdata indexes to AWS...")
         aws_utils.add_table_hash_index(
             conn, "pp.postcode", "pp_data", "postcode"
         )
@@ -69,13 +111,26 @@ def init_setup_aws_ppdata(dir_name="data/ppdata"):
             conn, "pp.date", "pp_data", "date_of_transfer"
         )
 
+        print("Successfully uploaded ppdata to AWS.")
+
+        # Sanity checking
+        rows_uploaded = aws_utils.aws_get_number_of_rows_in_ppdata()
+        print(f"Successfully uploaded ppdata ({rows_uploaded} rows) to AWS.")
+        assert rows_uploaded == total_rows_to_upload, f"Expected to upload {total_rows_to_upload} rows, uploaded only {rows_uploaded}"
+
 
 def init_setup_aws_podata(dir_name="data/podata"):
     """
     WARNING: Do NOT run more than once. This operation is NOT idempotent.
     """
+    print("Downloading podata from gtd...")
     aws_utils.download_podata_from_gtd(dir_name=dir_name)
 
+    # Data cleanup
+    print("Fixing podata (removing invalid rows)...")
+    access.fix_podata(dir_name=dir_name)
+
+    total_rows_to_upload = 0
     with aws_utils.create_connection(database=constants.DATABASE_NAME) as conn:
         aws_utils.create_new_table_if_not_exists(
             conn,
@@ -105,16 +160,26 @@ def init_setup_aws_podata(dir_name="data/podata"):
             ]
         )
 
+        print("Uploading podata to AWS...")
         for _ in tqdm((1, )):
             file_name_with_dir = os.path.join(
                 dir_name, "open_postcode_geo.csv"
             )
-            aws_utils.upload_data_into_table(
-                constants.PODATA_TABLE_NAME,
-                file_name_with_dir,
-                fields_enclosed_by_char=""
-            )
 
+            tempdf = access.read_podata_to_df(
+                dir_name=dir_name,
+                fixed_version=True
+            )
+            total_rows_to_upload += len(tempdf)
+            del tempdf
+
+        aws_utils.upload_data_into_table(
+            constants.PODATA_TABLE_NAME,
+            file_name_with_dir,
+            fields_enclosed_by_char=""
+        )
+
+        print("Adding podata indexes to AWS...")
         aws_utils.add_table_hash_index(
             conn, "po.postcode", "postcode_data", "postcode"
         )
@@ -127,3 +192,8 @@ def init_setup_aws_podata(dir_name="data/podata"):
         aws_utils.add_table_btree_index(
             conn, "po.longitude", "postcode_data", "longitude"
         )
+
+        # Sanity checking
+        rows_uploaded = aws_utils.aws_get_number_of_rows_in_podata()
+        print(f"Successfully uploaded ppdata ({rows_uploaded} rows) to AWS.")
+        assert rows_uploaded == total_rows_to_upload, f"Expected to upload {total_rows_to_upload} rows, uploaded only {rows_uploaded}"
