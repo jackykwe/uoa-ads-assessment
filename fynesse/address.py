@@ -289,7 +289,7 @@ def predict_price(
     ax.plot(
         [final_prediction, final_prediction],
         [0, hist_values.max()],
-        color="black"
+        color="black",
         label="predicted price"
     )
     ax.legend()
