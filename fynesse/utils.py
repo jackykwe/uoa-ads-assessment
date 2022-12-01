@@ -53,6 +53,7 @@ def get_prices_near_interested_point(gdf_pppodata, latitude, longitude, box_widt
         )
     ]["price"]
     if len(result) == 0:
+        # should not see this exception, an earlier exception should've been thrown
         raise Exception("Unable to get any nearby property prices")
     while True:
         degree_distance_threshold /= 10

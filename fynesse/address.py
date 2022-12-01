@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import numpy as np
 import osmnx
 import pandas as pd
 import shapely
@@ -185,7 +186,8 @@ def predict_price(
     print("#######################################################################")
     print("# MAP AROUND PREDICTED HOUSE (at the provided latitude and longitude) #")
     print("#######################################################################")
-    fig, ax = plt.subplots(figsize=(10, 10))
+    fig, ax = plt.subplots(
+        figsize=(constants.PLT_MAP_WIDTH, constants.PLT_MAP_HEIGHT))
     # Plot street edges
     edges.plot(ax=ax, linewidth=1, edgecolor="dimgray")
     ax.set_xlim([west, east])
@@ -213,41 +215,40 @@ def predict_price(
     # Feature generation
     print("Generating features...")
 
-    # >> CONTINUE HERE. USE NAMES PROVIDED IN CATEGORY DICTIONARY. TIDY UP PRINTING.
-
-    for i, gdf_pois_category in tqdm(enumerate(list_of_gdf_pois_categories)):
-        gdf_pppodata[f"category_{i}_count"] = gdf_pppodata["geometry"].apply(
-            lambda geo: utils.find_number_within_bounding_box_of_point(geo, gdf_pois_category))
-        gdf_pppodata[f"category_{i}_closest_degree_distance"] = gdf_pppodata["geometry"].apply(
-            lambda geo: utils.find_degree_distance_to_closest_within_bounding_box_of_point(geo, gdf_pois_category))
-
     # Train a linear model on the data set you have created.
-    feature_columns = [f"category_{i}_count" for i in range(len(list_of_gdf_pois_categories))] + [
-        f"category_{i}_closest_degree_distance" for i in range(len(list_of_gdf_pois_categories))]
+    for gdf_pois_category, category_name in tqdm(zip(list_of_gdf_pois_categories, dict_of_categories)):
+        gdf_pppodata[f"{category_name}_count"] = gdf_pppodata["geometry"].apply(
+            lambda geo: utils.find_number_within_bounding_box_of_point(geo, gdf_pois_category))
+        gdf_pppodata[f"{category_name}_closest_degree_distance"] = gdf_pppodata["geometry"].apply(
+            lambda geo: utils.find_degree_distance_to_closest_within_bounding_box_of_point(geo, gdf_pois_category))
+    feature_columns_names = [f"{category_name}_count" for category_name in dict_of_categories] + [
+        f"{category_name}_closest_degree_distance" for category_name in dict_of_categories
+    ]
 
-    interested_point_geometry = shapely.geometry.Point(longitude, latitude)
-    interested_point_features_dict = {}
-    for i, gdf_pois_category in tqdm(enumerate(list_of_gdf_pois_categories)):
-        interested_point_features_dict[f"category_{i}_count"] = utils.find_number_within_bounding_box_of_point(
-            interested_point_geometry, gdf_pois_category
+    prediction_point_geometry = shapely.geometry.Point(longitude, latitude)
+    prediction_point_features_dict = {}
+    for gdf_pois_category, category_name in tqdm(zip(list_of_gdf_pois_categories, dict_of_categories)):
+        prediction_point_features_dict[f"{category_name}_count"] = utils.find_number_within_bounding_box_of_point(
+            prediction_point_geometry, gdf_pois_category
         )
-        interested_point_features_dict[f"category_{i}_closest_degree_distance"] = utils.find_degree_distance_to_closest_within_bounding_box_of_point(
-            interested_point_geometry, gdf_pois_category
+        prediction_point_features_dict[f"{category_name}_closest_degree_distance"] = utils.find_degree_distance_to_closest_within_bounding_box_of_point(
+            prediction_point_geometry, gdf_pois_category
         )
-    interested_point_features_dict = {
+    # Transform each value into a list, as expected by pd.DataFrame.from_dict()
+    prediction_point_features_dict = {
         k: [v]
-        for k, v in interested_point_features_dict.items()
+        for k, v in prediction_point_features_dict.items()
     }
-    interested_point_features = pd.DataFrame.from_dict(
-        interested_point_features_dict
-    )[feature_columns]
-    interested_point_features.insert(0, "const", 1.0)  # Insert a ones column
+    prediction_point_features = pd.DataFrame.from_dict(
+        prediction_point_features_dict
+    )[feature_columns_names]
+    prediction_point_features.insert(0, "const", 1.0)  # Insert a ones column
 
     # OLS
     print("Training model...")
     train_Y = gdf_pppodata.sort_values("price", ascending=True)["price"]
     train_X = gdf_pppodata.sort_values("price", ascending=True)[
-        feature_columns]
+        feature_columns_names]
     train_X = sm.add_constant(train_X)
     model = sm.OLS(train_Y, train_X)
 
@@ -259,8 +260,8 @@ def predict_price(
         train_X
     ).summary_frame(alpha=0.05)
 
-    print("Plotting model results (x axis has no meaning)...")
-    fig, ax = plt.subplots(figsize=(8, 6))
+    print("Plotting model results... (NB: x axis has no meaning)")
+    fig, ax = plt.subplots(figsize=(constants.PLT_WIDTH, constants.PLT_HEIGHT))
     ax.scatter(range(len(train_X)), train_Y, zorder=2)
     ax.plot(range(len(train_X)),
             Y_pred_of_train_X['mean'], color='red', linestyle='--', zorder=1)
@@ -270,11 +271,28 @@ def predict_price(
             Y_pred_of_train_X['obs_ci_upper'], color='red', linestyle='-', zorder=1)
     ax.fill_between(range(len(train_X)), Y_pred_of_train_X['obs_ci_lower'],
                     Y_pred_of_train_X['obs_ci_upper'], color='red', alpha=0.3, zorder=1)
-
-    Y_pred_of_interested_point = results.get_prediction(
-        interested_point_features).summary_frame(alpha=0.05)
-    print(f"\nPrediction:\n{Y_pred_of_interested_point}\n")
-
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     plt.tight_layout()
+
+    Y_pred_of_prediction_point = results.get_prediction(
+        prediction_point_features).summary_frame(alpha=0.05)
+    print(f"\nPrediction:\n{Y_pred_of_prediction_point}\n")
+
+    final_prediction = Y_pred_of_prediction_point["mean"]
+    fig, ax = plt.subplots(figsize=(constants.PLT_WIDTH, constants.PLT_HEIGHT))
+    hist_values, _, _ = ax.hist(
+        gdf_pppodata["price"],
+        # between 10 to 1000 bins
+        bins=np.clip(len(gdf_pppodata["date_of_transfer_dt"]) // 10, 10, 1000)
+    )
+    ax.plot(
+        [final_prediction, final_prediction],
+        [0, hist_values.max()],
+        color="black"
+        label="predicted price"
+    )
+    ax.legend()
+    ax.set_xlabel("date_of_transfer")
+    ax.set_ylabel("count")
+    plt.show()

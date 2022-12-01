@@ -4,6 +4,7 @@ from datetime import datetime
 
 # import geopandas as gpd
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from matplotlib.colors import LogNorm
 from tqdm.auto import tqdm
@@ -318,7 +319,12 @@ def characterise_raw_ppdata_and_raw_podata(
         figsize=(1 * constants.PLT_WIDTH_LARGE, 2 * constants.PLT_HEIGHT)
     )
 
-    axs[0].hist(df_price_date_latlongs["price"], bins=1000)
+    # axs[0].hist(df_price_date_latlongs["price"], bins=1000)
+    axs[0].hist(
+        df_price_date_latlongs["price"],
+        # between 10 to 1000 bins
+        bins=np.clip(len(df_price_date_latlongs["price"]) // 10, 10, 1000)
+    )
     axs[0].set_xlabel("price")
     axs[0].set_ylabel("log count")
     axs[0].set_yscale("log")
@@ -555,12 +561,24 @@ def characterise_aws_pppodata(
         figsize=(1 * constants.PLT_WIDTH_LARGE, 2 * constants.PLT_HEIGHT)
     )
 
-    axs[0].hist(df_pppodata_from_aws["price"], bins=100)
+    axs[0].hist(
+        df_pppodata_from_aws["price"],
+        # between 10 to 1000 bins
+        bins=np.clip(len(df_pppodata_from_aws["price"]) // 10, 10, 1000)
+    )
     axs[0].set_xlabel("price")
     axs[0].set_ylabel("log count")
     axs[0].set_yscale("log")
 
-    axs[1].hist(df_pppodata_from_aws["date_of_transfer_dt"], bins=100)
+    axs[1].hist(
+        df_pppodata_from_aws["date_of_transfer_dt"],
+        # between 10 to 1000 bins
+        bins=np.clip(
+            len(df_pppodata_from_aws["date_of_transfer_dt"]) // 10,
+            10,
+            1000
+        )
+    )
     axs[1].set_xlabel("date_of_transfer")
     axs[1].set_ylabel("count")
 
