@@ -124,7 +124,7 @@ def init_setup_aws_podata(dir_name="data/podata"):
     WARNING: Do NOT run more than once. This operation is NOT idempotent.
     """
     print("Downloading podata from gtd...")
-    aws_utils.download_podata_from_gtd(dir_name=dir_name)
+    access.download_podata_from_gtd(dir_name=dir_name)
 
     # Data cleanup
     print("Fixing podata (removing invalid rows)...")

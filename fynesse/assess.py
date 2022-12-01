@@ -39,8 +39,8 @@ def labelled(data):
 # Characterising ppdata and podata (before any form of cleanup) #
 #################################################################
 def characterise_raw_ppdata_and_raw_podata(
-    first_year_inclusive,
-    final_year_inclusive,
+    first_year_inclusive=constants.FIRST_YEAR_INCLUSIVE,
+    final_year_inclusive=constants.FINAL_YEAR_INCLUSIVE,
     svg_output_dir="pppodata_characterisation/",
 ):
     os.makedirs(svg_output_dir, exist_ok=True)
@@ -48,23 +48,24 @@ def characterise_raw_ppdata_and_raw_podata(
     print("podata: Gathering statistics...")
     df_podata = access.read_podata_to_df(fixed_version=False)
 
+    count_podata_record = len(df_podata)
     # Are there null postcodes in podata?
     count_podata_postcode_null = df_podata["postcode"].isna().sum()
     # NA values don't have value, can't find latlong
-    df_podata.dropna(subset=["postcode"], inplace=True)
     print(
-        f"Dropped {count_podata_postcode_null} null postcode rows from df_podata"
+        f"Dropped {count_podata_postcode_null} null postcode rows from df_podata out of {count_podata_record}"
     )
+    df_podata.dropna(subset=["postcode"], inplace=True)
 
     # ================================================================================= #
     # Aggregate statistics for ppdata from first_year_inclusive to final_year_inclusive #
     # ================================================================================= #
-    count_record = 0
+    count_ppdata_record = 0
     count_ppdata_postcode_null = 0
     # if postcode is null, that row won't count to wards the following statistics, as those rows
     # will not even be uploaded onto AWS after cleanup. We want to find out the statistics for the
     # rows that will be on AWS.
-    count_record_status_A = 0
+    count_ppdata_record_status_A = 0
     list_rows_record_status_not_A = []
     min_price = 1_000_000_000
     max_price = -1_000_000_000
@@ -77,9 +78,11 @@ def characterise_raw_ppdata_and_raw_podata(
     count_new_build_flag = defaultdict(lambda: 0)
     count_tenure_type = defaultdict(lambda: 0)
     count_ppd_category_type = defaultdict(lambda: 0)
+    count_record_status = defaultdict(lambda: 0)
     # ==================== #
     # podata distributions #
     # ==================== #
+    count_status = defaultdict(lambda: 0)
     count_usertype = defaultdict(lambda: 0)
     count_positional_quality_indicator = defaultdict(lambda: 0)
     # ============================================================== #
@@ -89,9 +92,6 @@ def characterise_raw_ppdata_and_raw_podata(
 
     for year in tqdm(range(first_year_inclusive, final_year_inclusive + 1)):
         for part in tqdm((1, 2), leave=False):
-            print(
-                f"[{year}part{part}] ppdata: Gathering statistics..."
-            )
             # There may not be enough memory to load ALL csvs as dataframes in RAM at once
             # So we delete (del) each csv's dataframe once we're done extracting what we need
             tempdf_ppdata = access.read_ppdata_to_df(
@@ -101,14 +101,13 @@ def characterise_raw_ppdata_and_raw_podata(
             # --------------------------------------------------------------------------------- #
             # Aggregate statistics for ppdata from first_year_inclusive to final_year_inclusive #
             # --------------------------------------------------------------------------------- #
-            count_record += len(tempdf_ppdata)
+            count_ppdata_record += len(tempdf_ppdata)
             count_ppdata_postcode_null += tempdf_ppdata["postcode"].isna(
             ).sum()
-            print(
-                f"[{year}part{part}] Number of null postcode rows: {tempdf_ppdata['postcode'].isna().sum()}"
-            )
-
             # NA postcodes are dropped so that table join can happen correctly
+            print(
+                f"[ppdata {year}part{part}] Dropped {tempdf_ppdata['postcode'].isna().sum()} null postcode rows out of {len(tempdf_ppdata)}"
+            )
             tempdf_ppdata.dropna(subset=["postcode"], inplace=True)
             # inner join because we want all postcodes to have latlongs
             tempdf_pppodata = tempdf_ppdata.merge(
@@ -119,7 +118,7 @@ def characterise_raw_ppdata_and_raw_podata(
             list_rows_record_status_not_A.append(
                 tempdf_pppodata[tempdf_pppodata["record_status"] != "A"].copy()
             )
-            count_record_status_A += len(
+            count_ppdata_record_status_A += len(
                 tempdf_pppodata[tempdf_pppodata["record_status"] == "A"]
             )
             min_price = min(min_price, tempdf_pppodata["price"].min())
@@ -136,10 +135,14 @@ def characterise_raw_ppdata_and_raw_podata(
                 count_tenure_type[tenure_type] += 1
             for _, ppd_category_type in tempdf_pppodata["ppd_category_type"].items():
                 count_ppd_category_type[ppd_category_type] += 1
+            for _, record_status in tempdf_pppodata["record_status"].items():
+                count_record_status[record_status] += 1
 
             # -------------------- #
             # podata distributions #
             # -------------------- #
+            for _, status in tempdf_pppodata["status"].items():
+                count_status[status] += 1
             for _, usertype in tempdf_pppodata["usertype"].items():
                 count_usertype[usertype] += 1
             for _, positional_quality_indicator in tempdf_pppodata["positional_quality_indicator"].items():
@@ -170,9 +173,14 @@ def characterise_raw_ppdata_and_raw_podata(
     # Aggregate statistics for ppdata from first_year_inclusive to final_year_inclusive #
     # ================================================================================= #
     print(
-        f"Number of rows: {count_record}")
+        f"Number of rows in podata: {count_podata_record}")
     print(
-        f"Number of rows whose postcode is null: {count_ppdata_postcode_null}"
+        f"Number of rows in podata whose postcode is null: {count_podata_postcode_null}"
+    )
+    print(
+        f"Number of rows in ppdata: {count_ppdata_record}")
+    print(
+        f"Number of rows in ppdata whose postcode is null: {count_ppdata_postcode_null}"
     )
     # if postcode is null, that row won't count to wards the following statistics, as those rows
     # will not even be uploaded onto AWS after cleanup. We want to find out the statistics for the
@@ -181,20 +189,20 @@ def characterise_raw_ppdata_and_raw_podata(
         list_rows_record_status_not_A, copy=False
     )
     print(
-        f"Number of rows whose record_status isn't A: {len(rows_record_status_not_A)}"
+        f"Number of rows in ppdata whose record_status isn't A: {len(rows_record_status_not_A)}"
     )
     print(
-        f"Number of rows whose record_status is A: {count_record_status_A}"
+        f"Number of rows in ppdata whose record_status is A: {count_ppdata_record_status_A}"
     )
     print(
-        f"Minimum price over all rows: {min_price}")
+        f"Minimum price in ppdata over all rows: {min_price}")
     print(
-        f"Maximum price over all rows: {max_price}")
+        f"Maximum price in ppdata over all rows: {max_price}")
 
     # We plot these following distributions now
     fig, axs = plt.subplots(
-        3, 4,
-        figsize=(4 * constants.PLT_WIDTH, 3 * constants.PLT_HEIGHT)
+        4, 4,
+        figsize=(4 * constants.PLT_WIDTH, 4 * constants.PLT_HEIGHT)
     )
     # ==================== #
     # ppdata distributions #
@@ -262,42 +270,74 @@ def characterise_raw_ppdata_and_raw_podata(
     axs[1][3].set_xlabel("ppd_category_type")
     axs[1][3].set_ylabel("log probability")
     axs[1][3].set_yscale("log")
-    # ==================== #
-    # podata distributions #
-    # ==================== #
+
     axs[2][0].bar(
-        count_usertype.keys(),
-        utils.counts_to_probability(list(count_usertype.values()))
+        count_record_status.keys(),
+        utils.counts_to_probability(list(count_record_status.values()))
     )
-    axs[2][0].set_xlabel("usertype")
+    axs[2][0].set_xlabel("record_status")
     axs[2][0].set_ylabel("probability")
 
     axs[2][1].bar(
+        count_record_status.keys(),
+        utils.counts_to_probability(list(count_record_status.values())),
+        color="red"
+    )
+    axs[2][1].set_xlabel("record_status")
+    axs[2][1].set_ylabel("log probability")
+    axs[2][1].set_yscale("log")
+    # ==================== #
+    # podata distributions #
+    # ==================== #
+    axs[2][2].bar(
+        count_status.keys(),
+        utils.counts_to_probability(list(count_status.values()))
+    )
+    axs[2][2].set_xlabel("status")
+    axs[2][2].set_ylabel("probability")
+
+    axs[2][3].bar(
+        count_status.keys(),
+        utils.counts_to_probability(list(count_status.values())),
+        color="red"
+    )
+    axs[2][3].set_xlabel("status")
+    axs[2][3].set_ylabel("log probability")
+    axs[2][3].set_yscale("log")
+
+    axs[3][0].bar(
+        count_usertype.keys(),
+        utils.counts_to_probability(list(count_usertype.values()))
+    )
+    axs[3][0].set_xlabel("usertype")
+    axs[3][0].set_ylabel("probability")
+
+    axs[3][1].bar(
         count_usertype.keys(),
         utils.counts_to_probability(list(count_usertype.values())),
         color="red"
     )
-    axs[2][1].set_xlabel("usertype")
-    axs[2][1].set_ylabel("log probability")
-    axs[2][1].set_yscale("log")
+    axs[3][1].set_xlabel("usertype")
+    axs[3][1].set_ylabel("log probability")
+    axs[3][1].set_yscale("log")
 
-    axs[2][2].bar(
+    axs[3][2].bar(
         count_positional_quality_indicator.keys(),
         utils.counts_to_probability(
             list(count_positional_quality_indicator.values()))
     )
-    axs[2][2].set_xlabel("positional_quality_indicator")
-    axs[2][2].set_ylabel("probability")
+    axs[3][2].set_xlabel("positional_quality_indicator")
+    axs[3][2].set_ylabel("probability")
 
-    axs[2][3].bar(
+    axs[3][3].bar(
         count_positional_quality_indicator.keys(),
         utils.counts_to_probability(
             list(count_positional_quality_indicator.values())),
         color="red"
     )
-    axs[2][3].set_xlabel("positional_quality_indicator")
-    axs[2][3].set_ylabel("log probability")
-    axs[2][3].set_yscale("log")
+    axs[3][3].set_xlabel("positional_quality_indicator")
+    axs[3][3].set_ylabel("log probability")
+    axs[3][3].set_yscale("log")
 
     plt.savefig(
         os.path.join(svg_output_dir, "ppdata_and_podata_distributions.svg")
@@ -314,6 +354,7 @@ def characterise_raw_ppdata_and_raw_podata(
         datetime.fromisoformat
     )
 
+    print("\npppodata_distributions plot:\n")
     fig, axs = plt.subplots(
         2, 1,
         figsize=(1 * constants.PLT_WIDTH_LARGE, 2 * constants.PLT_HEIGHT)
@@ -335,7 +376,6 @@ def characterise_raw_ppdata_and_raw_podata(
     axs[1].set_ylabel("count")
 
     plt.savefig(os.path.join(svg_output_dir, "pppodata_distributions.svg"))
-    print("\npppodata_distributions plot:\n")
     plt.show()
     print()
 
@@ -353,6 +393,7 @@ def characterise_raw_ppdata_and_raw_podata(
     # ax.set_ylabel('latitude')
     # plt.show()
 
+    print("\npppodata_latlong_distribution:\n")
     fig, ax = plt.subplots(
         figsize=(constants.PLT_MAP_WIDTH, constants.PLT_MAP_HEIGHT)
     )
@@ -360,14 +401,13 @@ def characterise_raw_ppdata_and_raw_podata(
     _, _, _, im = ax.hist2d(
         df_price_date_latlongs["longitude"].astype(float),
         df_price_date_latlongs["latitude"].astype(float),
-        bins=500,
+        bins=np.clip(100, 500, len(df_price_date_latlongs) // 10),
         norm=LogNorm()
     )
     fig.colorbar(im, ax=ax)
     plt.savefig(
         os.path.join(svg_output_dir, "pppodata_latlong_distribution.svg")
     )
-    print("\npppodata_latlong_distribution:\n")
     plt.show()
     print()
 
