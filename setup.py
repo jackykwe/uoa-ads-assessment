@@ -27,7 +27,19 @@ VERSION = "0.1.0"
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    "pandas", "numpy", "jupyter", "matplotlib",
+    "pandas",
+    "numpy",
+    "jupyter",  # "matplotlib",
+    "pandas",
+    "requests",
+    "tqdm",
+    "uuid",
+    "geopandas",
+    "osmnx",
+    "matplotlib",  # must manually downgrade matplotlib to 3.1.3. osmnx will install >3.1.3, which breaks plots!
+    "shapely",
+    "statsmodels",
+    "pymysql"
 ]
 
 # What packages are optional?
