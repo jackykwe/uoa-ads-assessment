@@ -88,7 +88,7 @@ def characterise_raw_ppdata_and_raw_podata(
     # ============================================================== #
     # pppodata distributions (after table join of ppdata and podata) #
     # ============================================================== #
-    list_of_df_price_date_latlongs = []
+    list_of_df_price_date_latlongs_property_type = []
 
     for year in tqdm(range(first_year_inclusive, final_year_inclusive + 1)):
         for part in tqdm((1, 2), leave=False):
@@ -151,14 +151,15 @@ def characterise_raw_ppdata_and_raw_podata(
             # -------------------------------------------------------------- #
             # pppodata distributions (after table join of ppdata and podata) #
             # -------------------------------------------------------------- #
-            list_of_df_price_date_latlongs.append(
+            list_of_df_price_date_latlongs_property_type.append(
                 tempdf_pppodata.loc[
                     :,
                     [
                         "price",
                         "date_of_transfer",
                         "latitude",
-                        "longitude"
+                        "longitude",
+                        "property_type"
                     ]
                 ].copy()
             )
@@ -200,6 +201,7 @@ def characterise_raw_ppdata_and_raw_podata(
         f"Maximum price in ppdata over all rows: {max_price}")
 
     # We plot these following distributions now
+    print("\nppdata_and_podata_distributions plot:\n")
     fig, axs = plt.subplots(
         4, 4,
         figsize=(4 * constants.PLT_WIDTH, 4 * constants.PLT_HEIGHT)
@@ -342,15 +344,16 @@ def characterise_raw_ppdata_and_raw_podata(
     plt.savefig(
         os.path.join(svg_output_dir, "ppdata_and_podata_distributions.svg")
     )
-    print("\nppdata_and_podata_distributions plot:\n")
     plt.show()
     print()
     # ============================================================== #
     # pppodata distributions (after table join of ppdata and podata) #
     # ============================================================== #
-    df_price_date_latlongs = pd.concat(list_of_df_price_date_latlongs)
-    del list_of_df_price_date_latlongs  # allow GC to collect the fragments
-    df_price_date_latlongs["date_of_transfer_dt"] = df_price_date_latlongs["date_of_transfer"].apply(
+    df_price_date_latlongs_property_type = pd.concat(
+        list_of_df_price_date_latlongs_property_type)
+    # allow GC to collect the fragments
+    del list_of_df_price_date_latlongs_property_type
+    df_price_date_latlongs_property_type["date_of_transfer_dt"] = df_price_date_latlongs_property_type["date_of_transfer"].apply(
         datetime.fromisoformat
     )
 
@@ -362,20 +365,67 @@ def characterise_raw_ppdata_and_raw_podata(
 
     # axs[0].hist(df_price_date_latlongs["price"], bins=1000)
     axs[0].hist(
-        df_price_date_latlongs["price"],
+        df_price_date_latlongs_property_type["price"],
         # between 10 to 1000 bins
-        bins=np.clip(len(df_price_date_latlongs["price"]) // 10, 10, 1000)
+        bins=np.clip(
+            len(df_price_date_latlongs_property_type["price"]) // 10, 10, 1000
+        )
     )
     axs[0].set_xlabel("price")
     axs[0].set_ylabel("log count")
     axs[0].set_yscale("log")
 
-    axs[1].hist(df_price_date_latlongs["date_of_transfer_dt"],
+    axs[1].hist(df_price_date_latlongs_property_type["date_of_transfer_dt"],
                 bins=336)  # 336 months from 1995 to 2022
     axs[1].set_xlabel("date_of_transfer")
     axs[1].set_ylabel("count")
 
     plt.savefig(os.path.join(svg_output_dir, "pppodata_distributions.svg"))
+    plt.show()
+    print()
+
+    # ================================================ #
+    # ppdata price histograms (for each property type) #
+    # ================================================ #
+    print("\nprice plots for given property_type:\n")
+    fig, axs = plt.subplots(
+        2, len(count_property_type),
+        figsize=(
+            len(count_property_type) *
+            constants.PLT_WIDTH, 2 * constants.PLT_HEIGHT
+        )
+    )
+
+    for i, property_type in enumerate(count_property_type):
+        prices = df_price_date_latlongs_property_type[
+            df_price_date_latlongs_property_type["property_type"] == property_type
+        ]["price"]
+        # between 10 to 100 bins
+        axs[0][i].hist(
+            prices,
+            bins=np.clip(len(prices) // 10, 10, 100),
+            density=True
+        )
+        axs[0][i].set_xlabel(f"price (where property={property_type})")
+        axs[0][i].set_xscale("log")
+        axs[0][i].set_ylabel("probability")
+
+        axs[1][i].hist(
+            prices,
+            bins=np.clip(len(prices) // 10, 10, 100),
+            density=True,
+            color="red"
+        )
+        axs[1][i].set_xlabel(f"price (where property={property_type})")
+        axs[1][i].set_xscale("log")
+        axs[1][i].set_ylabel("log probability")
+        axs[1][i].set_yscale("log")
+    plt.savefig(
+        os.path.join(
+            svg_output_dir,
+            "ppdata_price_plots_for_given_property_type.svg"
+        )
+    )
     plt.show()
     print()
 
@@ -399,9 +449,13 @@ def characterise_raw_ppdata_and_raw_podata(
     )
 
     _, _, _, im = ax.hist2d(
-        df_price_date_latlongs["longitude"].astype(float),
-        df_price_date_latlongs["latitude"].astype(float),
-        bins=np.clip(100, 500, len(df_price_date_latlongs) // 10),
+        df_price_date_latlongs_property_type["longitude"].astype(float),
+        df_price_date_latlongs_property_type["latitude"].astype(float),
+        bins=np.clip(
+            len(df_price_date_latlongs_property_type) // 10,
+            100,
+            500
+        ),
         norm=LogNorm()
     )
     fig.colorbar(im, ax=ax)
@@ -420,6 +474,8 @@ def characterise_aws_pppodata(
     df_pppodata_from_aws,
     svg_output_dir="prediction_svgs/",
     print_banners=True
+
+
 ):
     """
     This function is coupled to the schema of the pp_data and postcode_data tables in the database.

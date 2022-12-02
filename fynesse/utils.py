@@ -13,13 +13,13 @@ def counts_to_probability(counts_list):
     return np.array(counts_list) / sum(counts_list)
 
 
-def merge_categories(list_of_categories_to_merge):
+def merge_categories(dict_of_categories_to_merge):
     """
     Prepares a dictionary ready to be passed as tags argument to osmnx.geometries.geometries_from_bbox()
     A category is a dictionaries where the keys are str, and the values are either list or True.
     """
     result = defaultdict(lambda: set())
-    for category in list_of_categories_to_merge:
+    for _, category in dict_of_categories_to_merge.items():
         for k, ls_or_True in category.items():
             # this block abuses duck-typing in Python
             if result[k] is True:
@@ -71,24 +71,24 @@ def get_prices_near_interested_point(gdf_pppodata, latitude, longitude, box_widt
         result = new_result
 
 
-def filter_pois(pois_df, category):
+def filter_pois(pois_gdf, category):
     """
     Filter, keeping only POIs (rows) that match at least one of the provided category dictionary
     :param pois_df: the dataframe returned by osmnx.geometries_from_bbox()
     :param category: a category (dictionary that maps string keys to True/a list)
     """
-    filter = pd.Series(False, index=pois_df.index)
+    filter = pd.Series(False, index=pois_gdf.index)
     for tag, ls_or_True in category.items():
-        if tag not in pois_df.columns:
+        if tag not in pois_gdf.columns:
             # sometimes, no POIs that match a particular tag is found in the bounding box.
             # # In this case, there won't be a column for it.
             continue
         # abusing duck-typing
         if ls_or_True is True:
-            filter |= pois_df[tag].notna()
+            filter |= pois_gdf[tag].notna()
         else:
-            filter |= pois_df[tag].isin(ls_or_True)
-    return pois_df[filter]
+            filter |= pois_gdf[tag].isin(ls_or_True)
+    return pois_gdf[filter]
 
 
 def find_number_within_bounding_box_of_point(point_geometry, gdf_pois_category, box_width_km, box_height_km):

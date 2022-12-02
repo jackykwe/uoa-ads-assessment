@@ -160,7 +160,7 @@ def predict_price(
 
     list_of_gdf_pois_categories = [
         utils.filter_pois(gdf_pois, category)
-        for category in dict_of_categories
+        for _, category in dict_of_categories.items()
     ]
     # Sanity check: spliting the gdf_pois into fragments (gdf_pois_category-s) then unioning them shouldn't result in loss of rows
     assert sum(
