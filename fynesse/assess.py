@@ -681,8 +681,10 @@ def characterise_aws_pppodata(
     # ============================================================== #
     # pppodata distributions (after table join of ppdata and podata) #
     # ============================================================== #
-    df_pppodata_from_aws["date_of_transfer_dt"] = df_pppodata_from_aws["date_of_transfer"]
-    # .apply(datetime.fromisoformat)  # no need, because date_of_transfer is already a column of datetimes
+    # date_of_transfer is a column of dates, convert to datetime for consistency of codebase
+    df_pppodata_from_aws["date_of_transfer_dt"] = df_pppodata_from_aws["date_of_transfer"].apply(
+        lambda d: datetime.combine(d, datetime.min.time())
+    )
 
     print("\npppodata_distributions plot:\n")
     fig, axs = plt.subplots(
@@ -725,36 +727,37 @@ def characterise_aws_pppodata(
     # ================================================ #
     print("\nprice plots for given property_type:\n")
     fig, axs = plt.subplots(
+        # len(count_property_type) == 1 because of the way we structure our SQL query to AWS
         2, 1,
         figsize=(
             1 * constants.PLT_WIDTH, 2 * constants.PLT_HEIGHT
         )
     )
 
-    for i, property_type in enumerate(count_property_type):
-        prices = df_pppodata_from_aws[
-            df_pppodata_from_aws["property_type"] == property_type
-        ]["price"]
-        # between 10 to 100 bins
-        axs[0].hist(
-            prices,
-            bins=np.clip(len(prices) // 10, 10, 100),
-            density=True
-        )
-        axs[0].set_xlabel(f"price (where property={property_type})")
-        axs[0].set_xscale("log")
-        axs[0].set_ylabel("probability")
+    prices = df_pppodata_from_aws["price"]
+    # between 10 to 100 bins
+    axs[0].hist(
+        prices,
+        bins=np.clip(len(prices) // 10, 10, 100),
+        density=True
+    )
+    axs[0].set_xlabel(
+        f"price (where property={df_pppodata_from_aws['property_type'][0]})")
+    axs[0].set_xscale("log")
+    axs[0].set_ylabel("probability")
 
-        axs[1].hist(
-            prices,
-            bins=np.clip(len(prices) // 10, 10, 100),
-            density=True,
-            color="red"
-        )
-        axs[1].set_xlabel(f"price (where property={property_type})")
-        axs[1].set_xscale("log")
-        axs[1].set_ylabel("log probability")
-        axs[1].set_yscale("log")
+    axs[1].hist(
+        prices,
+        bins=np.clip(len(prices) // 10, 10, 100),
+        density=True,
+        color="red"
+    )
+    axs[1].set_xlabel(
+        f"price (where property={df_pppodata_from_aws['property_type'][0]})"
+    )
+    axs[1].set_xscale("log")
+    axs[1].set_ylabel("log probability")
+    axs[1].set_yscale("log")
     plt.savefig(
         os.path.join(
             svg_output_dir,

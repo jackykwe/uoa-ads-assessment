@@ -178,14 +178,15 @@ def predict_price(
     print("################################")
     print("# CHARACTERISATION OF AWS ROWS #")
     print("################################")
+    # a modified version of assess.characterise_raw_ppdata_and_raw_podata(), which we've looked at before in Question 2
     assess.characterise_aws_pppodata(
         prediction_uuid, df_pppodata, print_banners=False
     )
 
     print()
-    print("#######################################################################")
-    print("# MAP AROUND PREDICTED HOUSE (at the provided latitude and longitude) #")
-    print("#######################################################################")
+    print("##########################################################################")
+    print("# MAP AROUND PREDICTED PROPERTY (at the provided latitude and longitude) #")
+    print("##########################################################################")
     fig, ax = plt.subplots(
         figsize=(constants.PLT_MAP_WIDTH, constants.PLT_MAP_HEIGHT))
     # Plot street edges
@@ -222,6 +223,15 @@ def predict_price(
         color="black",
         alpha=0.5
     )
+    for i in range(len(gdf_pppodata)):
+        ax.plot(
+            gdf_pppodata["longitude"][i],
+            gdf_pppodata["latitude"][i],
+            marker="o",
+            markersize=10,
+            color="black",
+            alpha=0.5
+        )
     ax.legend()
     plt.savefig(
         os.path.join(
@@ -229,20 +239,31 @@ def predict_price(
             f"{prediction_uuid}_map_around_{latitude}-{longitude}.svg"
         )
     )
-    plt.tight_layout()
+    plt.show()
 
-    print("########################")
-    print("# MODEL AND PREDICTION #")
-    print("########################")
+    print()
+    print("######################")
+    print("# FEATURE GENERATION #")
+    print("######################")
     # Feature generation
     print("Generating features...")
 
     # Train a linear model on the data set you have created.
     for category_name, gdf_pois_category in tqdm(dict_of_gdf_pois_categories.items()):
         gdf_pppodata[f"{category_name}_count"] = gdf_pppodata["geometry"].apply(
-            lambda geo: utils.find_number_within_bounding_box_of_point(geo, gdf_pois_category))
+            lambda geo: utils.find_number_within_bounding_box_of_point(
+                geo,
+                gdf_pois_category,
+                box_width_km,
+                box_height_km
+            ))
         gdf_pppodata[f"{category_name}_closest_degree_distance"] = gdf_pppodata["geometry"].apply(
-            lambda geo: utils.find_degree_distance_to_closest_within_bounding_box_of_point(geo, gdf_pois_category))
+            lambda geo: utils.find_degree_distance_to_closest_within_bounding_box_of_point(
+                geo,
+                gdf_pois_category,
+                box_width_km,
+                box_height_km
+            ))
     feature_columns_names = [f"{category_name}_count" for category_name in dict_of_categories] + [
         f"{category_name}_closest_degree_distance" for category_name in dict_of_categories
     ]
@@ -251,10 +272,16 @@ def predict_price(
     prediction_point_features_dict = {}
     for category_name, gdf_pois_category in tqdm(dict_of_gdf_pois_categories.items()):
         prediction_point_features_dict[f"{category_name}_count"] = utils.find_number_within_bounding_box_of_point(
-            prediction_point_geometry, gdf_pois_category
+            prediction_point_geometry,
+            gdf_pois_category,
+            box_width_km,
+            box_height_km
         )
         prediction_point_features_dict[f"{category_name}_closest_degree_distance"] = utils.find_degree_distance_to_closest_within_bounding_box_of_point(
-            prediction_point_geometry, gdf_pois_category
+            prediction_point_geometry,
+            gdf_pois_category,
+            box_width_km,
+            box_height_km
         )
     # Transform each value into a list, as expected by pd.DataFrame.from_dict()
     prediction_point_features_dict = {
@@ -266,25 +293,42 @@ def predict_price(
     )[feature_columns_names]
     prediction_point_features.insert(0, "const", 1.0)  # Insert a ones column
 
+    print()
+    print("########################")
+    print("# MODEL AND PREDICTION #")
+    print("########################")
     # OLS
-    print("Training model...")
     train_Y = gdf_pppodata.sort_values("price", ascending=True)["price"]
     train_X = gdf_pppodata.sort_values("price", ascending=True)[
         feature_columns_names]
-    train_X = sm.add_constant(train_X)
+    train_X.insert(0, "const", 1.0)  # add ones column
+
+    print("\nTraining model (non-regularised)...")
     model = sm.OLS(train_Y, train_X)
-
     results = model.fit()
+    print()
     print(results.summary())
-
-    # alpha is the significance level. Confidence interval is 1 - alpha.
     Y_pred_of_train_X = results.get_prediction(
         train_X
     ).summary_frame(alpha=0.05)
+    Y_pred_of_train_X_mse = utils.mse(Y_pred_of_train_X["mean"], train_Y)
 
-    print("Plotting model results... (NB: x axis has no meaning)")
+    print("\nTraining model (regularised)...")
+    model_regularised = sm.OLS(train_Y, train_X)
+    results_regularised = model.fit_regularized(alpha=0.10, L1_wt=1.0)
+    # alpha is the significance level. Confidence interval is 1 - alpha.
+    Y_pred_of_train_X_regularised = results_regularised.predict(train_X)
+    Y_pred_of_train_X_regularised_mse = utils.mse(
+        Y_pred_of_train_X_regularised, train_Y)
+    print()
+    print("Regularised model coefs:")
+    for i, (feature_name, beta) in enumerate(zip(train_X.columns, results_regularised.params)):
+        print(f"β_{feature_name}={beta}")
+
+    print("\nPlotting model results... (NB: x axis has no meaning)")
     fig, ax = plt.subplots(figsize=(constants.PLT_WIDTH, constants.PLT_HEIGHT))
     ax.scatter(range(len(train_X)), train_Y, zorder=2)
+    # Non-regularised plot
     ax.plot(range(len(train_X)),
             Y_pred_of_train_X['mean'], color='red', linestyle='--', zorder=1)
     ax.plot(range(len(train_X)),
@@ -293,16 +337,31 @@ def predict_price(
             Y_pred_of_train_X['obs_ci_upper'], color='red', linestyle='-', zorder=1)
     ax.fill_between(range(len(train_X)), Y_pred_of_train_X['obs_ci_lower'],
                     Y_pred_of_train_X['obs_ci_upper'], color='red', alpha=0.3, zorder=1)
+    # Regularised plot
+    ax.plot(range(len(train_X)), Y_pred_of_train_X_regularised,
+            color="black", linestyle='--', zorder=1)
     ax.set_xlabel("x")
     ax.set_ylabel("y")
-    plt.tight_layout()
+    plt.show()
 
     Y_pred_of_prediction_point = results.get_prediction(
         prediction_point_features).summary_frame(alpha=0.05)
-    print(f"\nPrediction:\n{Y_pred_of_prediction_point}\n")
+    print()
+    print(
+        f"Prediction (non-regularised model; MSE={Y_pred_of_train_X_mse}):\n{Y_pred_of_prediction_point}")
+    print()
+    Y_pred_of_prediction_point_regularised = results_regularised.predict(
+        prediction_point_features)
+    print(
+        f"Prediction (regularised model; MSE={Y_pred_of_train_X_regularised_mse}):\n{Y_pred_of_prediction_point_regularised}")
+    print()
 
-    final_prediction = Y_pred_of_prediction_point["mean"]
-    fig, ax = plt.subplots(figsize=(constants.PLT_WIDTH, constants.PLT_HEIGHT))
+    final_prediction = Y_pred_of_prediction_point["mean"][0]
+    final_prediction_obs_ci_lower = Y_pred_of_prediction_point["obs_ci_lower"][0]
+    final_prediction_obs_ci_upper = Y_pred_of_prediction_point["obs_ci_upper"][0]
+    final_prediction_regularised = Y_pred_of_prediction_point_regularised[0]
+    fig, ax = plt.subplots(
+        figsize=(constants.PLT_WIDTH_LARGE, constants.PLT_HEIGHT))
     hist_values, _, _ = ax.hist(
         gdf_pppodata["price"],
         # between 10 to 1000 bins
@@ -311,10 +370,45 @@ def predict_price(
     ax.plot(
         [final_prediction, final_prediction],
         [0, hist_values.max()],
+        color="red",
+        linestyle="--",
+        label="predicted price (non-regularised model)"
+    )
+    ax.plot(
+        [final_prediction_obs_ci_lower, final_prediction_obs_ci_lower],
+        [0, hist_values.max()],
+        color="red",
+        linestyle="-",
+    )
+    ax.plot(
+        [final_prediction_obs_ci_upper, final_prediction_obs_ci_upper],
+        [0, hist_values.max()],
+        color="red",
+        linestyle="-",
+    )
+    ax.fill_betweenx([0, hist_values.max()], final_prediction_obs_ci_lower,
+                     final_prediction_obs_ci_upper, color='red', alpha=0.3)
+    ax.plot(
+        [final_prediction_regularised, final_prediction_regularised],
+        [0, hist_values.max()],
         color="black",
-        label="predicted price"
+        linestyle="--",
+        label="predicted price (regularised model)"
     )
     ax.legend()
-    ax.set_xlabel("date_of_transfer")
+    ax.set_xlabel("price")
     ax.set_ylabel("count")
     plt.show()
+
+    if final_prediction_obs_ci_lower < 0:
+        print("WARNING: Lower end of confidence interval lies below 0 pounds!")
+    # prefer prediction from regularised model if MSE of regularised model is smaller than the non-regularised model
+    if Y_pred_of_train_X_regularised_mse < Y_pred_of_train_X_mse:
+        print("Outputting prediction of regularised model (black dotted line)")
+        output = final_prediction_regularised
+    else:
+        print("Outputting prediction of non-regularised model (red dotted line)")
+        output = final_prediction
+    if output < gdf_pppodata["price"].min() or output > gdf_pppodata["price"].max():
+        print("WARNING: The predicted value lies outside of the training dataset's range!")
+    return output

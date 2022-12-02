@@ -123,3 +123,7 @@ def find_degree_distance_to_closest_within_bounding_box_of_point(point_geometry,
         # assume that we can find the next closest one if our bounding box dimensions is scaled by x2 (see diagram)
         return math.sqrt(2) * max(box_width, box_height)
     return (gdf_pois_category_within_bounding_box_of_point["geometry"].apply(lambda geo: geo.distance(point_geometry))).min()
+
+
+def mse(nparr_values1, nparr_values2):
+    return ((np.array(nparr_values1) - np.array(nparr_values2)) ** 2).mean()
