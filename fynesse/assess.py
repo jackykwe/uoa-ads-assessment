@@ -363,7 +363,6 @@ def characterise_raw_ppdata_and_raw_podata(
         figsize=(1 * constants.PLT_WIDTH_LARGE, 2 * constants.PLT_HEIGHT)
     )
 
-    # axs[0].hist(df_price_date_latlongs["price"], bins=1000)
     axs[0].hist(
         df_price_date_latlongs_property_type["price"],
         # between 10 to 1000 bins
@@ -471,11 +470,9 @@ def characterise_raw_ppdata_and_raw_podata(
 ############################################################
 def characterise_aws_pppodata(
     prediction_uuid,
-    df_pppodata_from_aws,
+    df_pppodata_from_aws,  # date column is a datatime already
     svg_output_dir="prediction_svgs/",
     print_banners=True
-
-
 ):
     """
     This function is coupled to the schema of the pp_data and postcode_data tables in the database.
@@ -504,9 +501,13 @@ def characterise_aws_pppodata(
     count_ppd_category_type = dict(
         df_pppodata_from_aws["ppd_category_type"].value_counts()
     )
+    count_record_status = dict(
+        df_pppodata_from_aws["record_status"].value_counts()
+    )
     # ==================== #
     # podata distributions #
     # ==================== #
+    count_status = dict(df_pppodata_from_aws["status"].value_counts())
     count_usertype = dict(df_pppodata_from_aws["usertype"].value_counts())
     count_positional_quality_indicator = dict(
         df_pppodata_from_aws["positional_quality_indicator"].value_counts()
@@ -529,9 +530,10 @@ def characterise_aws_pppodata(
     print(f"Maximum price over all rows: {max_price}")
 
     # We plot these following distributions now
+    print("\nppdata_and_podata_distributions plot:\n")
     fig, axs = plt.subplots(
-        3, 4,
-        figsize=(4 * constants.PLT_WIDTH, 3 * constants.PLT_HEIGHT)
+        4, 4,
+        figsize=(4 * constants.PLT_WIDTH, 4 * constants.PLT_HEIGHT)
     )
     # ==================== #
     # ppdata distributions #
@@ -599,42 +601,74 @@ def characterise_aws_pppodata(
     axs[1][3].set_xlabel("ppd_category_type")
     axs[1][3].set_ylabel("log probability")
     axs[1][3].set_yscale("log")
-    # ==================== #
-    # podata distributions #
-    # ==================== #
+
     axs[2][0].bar(
-        count_usertype.keys(),
-        utils.counts_to_probability(list(count_usertype.values()))
+        count_record_status.keys(),
+        utils.counts_to_probability(list(count_record_status.values()))
     )
-    axs[2][0].set_xlabel("usertype")
+    axs[2][0].set_xlabel("record_status")
     axs[2][0].set_ylabel("probability")
 
     axs[2][1].bar(
+        count_record_status.keys(),
+        utils.counts_to_probability(list(count_record_status.values())),
+        color="red"
+    )
+    axs[2][1].set_xlabel("record_status")
+    axs[2][1].set_ylabel("log probability")
+    axs[2][1].set_yscale("log")
+    # ==================== #
+    # podata distributions #
+    # ==================== #
+    axs[2][2].bar(
+        count_status.keys(),
+        utils.counts_to_probability(list(count_status.values()))
+    )
+    axs[2][2].set_xlabel("status")
+    axs[2][2].set_ylabel("probability")
+
+    axs[2][3].bar(
+        count_status.keys(),
+        utils.counts_to_probability(list(count_status.values())),
+        color="red"
+    )
+    axs[2][3].set_xlabel("status")
+    axs[2][3].set_ylabel("log probability")
+    axs[2][3].set_yscale("log")
+
+    axs[3][0].bar(
+        count_usertype.keys(),
+        utils.counts_to_probability(list(count_usertype.values()))
+    )
+    axs[3][0].set_xlabel("usertype")
+    axs[3][0].set_ylabel("probability")
+
+    axs[3][1].bar(
         count_usertype.keys(),
         utils.counts_to_probability(list(count_usertype.values())),
         color="red"
     )
-    axs[2][1].set_xlabel("usertype")
-    axs[2][1].set_ylabel("log probability")
-    axs[2][1].set_yscale("log")
+    axs[3][1].set_xlabel("usertype")
+    axs[3][1].set_ylabel("log probability")
+    axs[3][1].set_yscale("log")
 
-    axs[2][2].bar(
+    axs[3][2].bar(
         count_positional_quality_indicator.keys(),
         utils.counts_to_probability(
             list(count_positional_quality_indicator.values()))
     )
-    axs[2][2].set_xlabel("positional_quality_indicator")
-    axs[2][2].set_ylabel("probability")
+    axs[3][2].set_xlabel("positional_quality_indicator")
+    axs[3][2].set_ylabel("probability")
 
-    axs[2][3].bar(
+    axs[3][3].bar(
         count_positional_quality_indicator.keys(),
         utils.counts_to_probability(
             list(count_positional_quality_indicator.values())),
         color="red"
     )
-    axs[2][3].set_xlabel("positional_quality_indicator")
-    axs[2][3].set_ylabel("log probability")
-    axs[2][3].set_yscale("log")
+    axs[3][3].set_xlabel("positional_quality_indicator")
+    axs[3][3].set_ylabel("log probability")
+    axs[3][3].set_yscale("log")
 
     plt.savefig(
         os.path.join(
@@ -642,16 +676,15 @@ def characterise_aws_pppodata(
             f"{prediction_uuid}_ppdata_and_podata_distributions.svg"
         )
     )
-    print("\nppdata_and_podata_distributions plot:\n")
     plt.show()
     print()
     # ============================================================== #
     # pppodata distributions (after table join of ppdata and podata) #
     # ============================================================== #
-    df_pppodata_from_aws["date_of_transfer_dt"] = df_pppodata_from_aws["date_of_transfer"].apply(
-        datetime.fromisoformat
-    )
+    df_pppodata_from_aws["date_of_transfer_dt"] = df_pppodata_from_aws["date_of_transfer"]
+    # .apply(datetime.fromisoformat)  # no need, because date_of_transfer is already a column of datetimes
 
+    print("\npppodata_distributions plot:\n")
     fig, axs = plt.subplots(
         2, 1,
         figsize=(1 * constants.PLT_WIDTH_LARGE, 2 * constants.PLT_HEIGHT)
@@ -684,7 +717,51 @@ def characterise_aws_pppodata(
             f"{prediction_uuid}_pppodata_distributions.svg"
         )
     )
-    print("\npppodata_distributions plot:\n")
+    plt.show()
+    print()
+
+    # ================================================ #
+    # ppdata price histograms (for each property type) #
+    # ================================================ #
+    print("\nprice plots for given property_type:\n")
+    fig, axs = plt.subplots(
+        2, len(count_property_type),
+        figsize=(
+            len(count_property_type) *
+            constants.PLT_WIDTH, 2 * constants.PLT_HEIGHT
+        )
+    )
+
+    for i, property_type in enumerate(count_property_type):
+        prices = df_pppodata_from_aws[
+            df_pppodata_from_aws["property_type"] == property_type
+        ]["price"]
+        # between 10 to 100 bins
+        axs[0][i].hist(
+            prices,
+            bins=np.clip(len(prices) // 10, 10, 100),
+            density=True
+        )
+        axs[0][i].set_xlabel(f"price (where property={property_type})")
+        axs[0][i].set_xscale("log")
+        axs[0][i].set_ylabel("probability")
+
+        axs[1][i].hist(
+            prices,
+            bins=np.clip(len(prices) // 10, 10, 100),
+            density=True,
+            color="red"
+        )
+        axs[1][i].set_xlabel(f"price (where property={property_type})")
+        axs[1][i].set_xscale("log")
+        axs[1][i].set_ylabel("log probability")
+        axs[1][i].set_yscale("log")
+    plt.savefig(
+        os.path.join(
+            svg_output_dir,
+            f"{prediction_uuid}_ppdata_price_plots_for_given_property_type.svg"
+        )
+    )
     plt.show()
     print()
 
@@ -702,6 +779,7 @@ def characterise_aws_pppodata(
     # ax.set_ylabel('latitude')
     # plt.show()
 
+    print("\npppodata_latlong_distribution:\n")
     fig, ax = plt.subplots(
         figsize=(constants.PLT_MAP_WIDTH, constants.PLT_MAP_HEIGHT)
     )
@@ -719,6 +797,5 @@ def characterise_aws_pppodata(
             f"{prediction_uuid}_pppodata_latlong_distribution.svg"
         )
     )
-    print("\npppodata_latlong_distribution:\n")
     plt.show()
     print()

@@ -158,13 +158,13 @@ def predict_price(
         f"Fetched {len(gdf_pois)} POIs in the bounding box around latitude={latitude}, longitude={longitude}."
     )
 
-    list_of_gdf_pois_categories = [
-        utils.filter_pois(gdf_pois, category)
-        for _, category in dict_of_categories.items()
-    ]
+    dict_of_gdf_pois_categories = {
+        category_name: utils.filter_pois(gdf_pois, category)
+        for category_name, category in dict_of_categories.items()
+    }
     # Sanity check: spliting the gdf_pois into fragments (gdf_pois_category-s) then unioning them shouldn't result in loss of rows
     assert sum(
-        [len(gdf) for gdf in list_of_gdf_pois_categories]
+        [len(gdf) for gdf in dict_of_gdf_pois_categories.values()]
     ) >= len(gdf_pois)
 
     print("Getting edges from OSM for plotting...")
@@ -189,18 +189,40 @@ def predict_price(
     fig, ax = plt.subplots(
         figsize=(constants.PLT_MAP_WIDTH, constants.PLT_MAP_HEIGHT))
     # Plot street edges
-    edges.plot(ax=ax, linewidth=1, edgecolor="dimgray")
+    edges.plot(ax=ax, linewidth=1, edgecolor="dimgray", alpha=0.25)
     ax.set_xlim([west, east])
     ax.set_ylim([south, north])
     ax.set_xlabel("longitude")
     ax.set_ylabel("latitude")
     # Plot all POIs
-    for i, gdf_pois_category in enumerate(list_of_gdf_pois_categories):
+    for i, (category_name, gdf_pois_category) in enumerate(dict_of_gdf_pois_categories.items()):
         if "node" in gdf_pois_category.index:
             gdf_pois_category.loc["node"].plot(
-                ax=ax, color="blue", alpha=0.7, marker=f"${i}$", markersize=150)
+                ax=ax,
+                color=plt.rcParams["axes.prop_cycle"].by_key()["color"][
+                    i % len(plt.rcParams["axes.prop_cycle"].by_key()["color"])
+                ],
+                alpha=0.7,
+                marker=f"${i}$",
+                markersize=100,
+                label=category_name
+            )
         if "way" in gdf_pois_category.index:
-            gdf_pois_category.loc["way"].plot(ax=ax, color="red", alpha=0.25)
+            gdf_pois_category.loc["way"].plot(
+                ax=ax,
+                color=plt.rcParams["axes.prop_cycle"].by_key()["color"][
+                    i % len(plt.rcParams["axes.prop_cycle"].by_key()["color"])
+                ],
+                alpha=0.5
+            )
+    ax.plot(
+        longitude, latitude,
+        marker="*",
+        markersize=25,
+        color="black",
+        alpha=0.5
+    )
+    ax.legend()
     plt.savefig(
         os.path.join(
             svg_output_dir,
@@ -216,7 +238,7 @@ def predict_price(
     print("Generating features...")
 
     # Train a linear model on the data set you have created.
-    for gdf_pois_category, category_name in tqdm(zip(list_of_gdf_pois_categories, dict_of_categories)):
+    for category_name, gdf_pois_category in tqdm(dict_of_gdf_pois_categories.items()):
         gdf_pppodata[f"{category_name}_count"] = gdf_pppodata["geometry"].apply(
             lambda geo: utils.find_number_within_bounding_box_of_point(geo, gdf_pois_category))
         gdf_pppodata[f"{category_name}_closest_degree_distance"] = gdf_pppodata["geometry"].apply(
@@ -227,7 +249,7 @@ def predict_price(
 
     prediction_point_geometry = shapely.geometry.Point(longitude, latitude)
     prediction_point_features_dict = {}
-    for gdf_pois_category, category_name in tqdm(zip(list_of_gdf_pois_categories, dict_of_categories)):
+    for category_name, gdf_pois_category in tqdm(dict_of_gdf_pois_categories.items()):
         prediction_point_features_dict[f"{category_name}_count"] = utils.find_number_within_bounding_box_of_point(
             prediction_point_geometry, gdf_pois_category
         )
