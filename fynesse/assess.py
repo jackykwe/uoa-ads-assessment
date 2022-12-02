@@ -390,8 +390,8 @@ def characterise_raw_ppdata_and_raw_podata(
     fig, axs = plt.subplots(
         2, len(count_property_type),
         figsize=(
-            len(count_property_type) *
-            constants.PLT_WIDTH, 2 * constants.PLT_HEIGHT
+            len(count_property_type) * constants.PLT_WIDTH,
+            2 * constants.PLT_HEIGHT
         )
     )
 
@@ -725,10 +725,9 @@ def characterise_aws_pppodata(
     # ================================================ #
     print("\nprice plots for given property_type:\n")
     fig, axs = plt.subplots(
-        2, len(count_property_type),
+        2, 1,
         figsize=(
-            len(count_property_type) *
-            constants.PLT_WIDTH, 2 * constants.PLT_HEIGHT
+            1 * constants.PLT_WIDTH, 2 * constants.PLT_HEIGHT
         )
     )
 
@@ -737,25 +736,25 @@ def characterise_aws_pppodata(
             df_pppodata_from_aws["property_type"] == property_type
         ]["price"]
         # between 10 to 100 bins
-        axs[0][i].hist(
+        axs[0].hist(
             prices,
             bins=np.clip(len(prices) // 10, 10, 100),
             density=True
         )
-        axs[0][i].set_xlabel(f"price (where property={property_type})")
-        axs[0][i].set_xscale("log")
-        axs[0][i].set_ylabel("probability")
+        axs[0].set_xlabel(f"price (where property={property_type})")
+        axs[0].set_xscale("log")
+        axs[0].set_ylabel("probability")
 
-        axs[1][i].hist(
+        axs[1].hist(
             prices,
             bins=np.clip(len(prices) // 10, 10, 100),
             density=True,
             color="red"
         )
-        axs[1][i].set_xlabel(f"price (where property={property_type})")
-        axs[1][i].set_xscale("log")
-        axs[1][i].set_ylabel("log probability")
-        axs[1][i].set_yscale("log")
+        axs[1].set_xlabel(f"price (where property={property_type})")
+        axs[1].set_xscale("log")
+        axs[1].set_ylabel("log probability")
+        axs[1].set_yscale("log")
     plt.savefig(
         os.path.join(
             svg_output_dir,

@@ -207,7 +207,7 @@ def get_pppodata_conditioned(
         with conn.cursor() as cur:
             cur.execute(
                 f"""
-                SELECT price, date_of_transfer, pp_data.postcode, property_type, new_build_flag, tenure_type, ppd_category_type, usertype, positional_quality_indicator, latitude, longitude FROM pp_data
+                SELECT price, date_of_transfer, pp_data.postcode, property_type, new_build_flag, tenure_type, ppd_category_type, record_status, status, usertype, positional_quality_indicator, latitude, longitude FROM pp_data
                 INNER JOIN postcode_data ON pp_data.postcode = postcode_data.postcode
                 WHERE
                     pp_data.property_type = '{property_type}'
@@ -231,6 +231,8 @@ def get_pppodata_conditioned(
             "new_build_flag",
             "tenure_type",
             "ppd_category_type",
+            "record_status",
+            "status",
             "usertype",
             "positional_quality_indicator",
             "latitude",
